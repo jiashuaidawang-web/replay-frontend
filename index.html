@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>顿悟股道 · 复盘看板</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">顿悟股道 · 复盘看板</div>
+    <div class="topbar-right">
+      <label class="date-label">交易日
+        <input type="date" id="datePicker" />
+      </label>
+      <button id="refreshBtn" class="btn">刷新</button>
+      <span id="apiState" class="api-state">API: …</span>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="sidebar">
+      <a class="nav-item active" href="#/overview" data-mod="overview">总览看板</a>
+      <a class="nav-item" href="#/mainline" data-mod="mainline">主线·龙头</a>
+      <a class="nav-item" href="#/sentiment" data-mod="sentiment">情绪·资金</a>
+      <a class="nav-item" href="#/trend" data-mod="trend">趋势战法</a>
+      <a class="nav-item" href="#/theme" data-mod="theme">炒作题材</a>
+      <a class="nav-item" href="#/tradelog" data-mod="tradelog">个人复盘</a>
+    </nav>
+
+    <main id="view" class="view"><div class="loading">加载中…</div></main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
