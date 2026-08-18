@@ -23,10 +23,13 @@ a{color:inherit;text-decoration:none}
 
 /* 布局 */
 .layout{display:flex;min-height:calc(100vh - 54px)}
-.sidebar{width:160px;background:var(--panel);border-right:1px solid var(--line);padding:12px 0;flex-shrink:0}
-.nav-item{display:block;padding:12px 18px;font-size:14px;color:var(--ink);border-left:3px solid transparent}
+.sidebar{width:210px;background:var(--panel);border-right:1px solid var(--line);padding:8px 0;flex-shrink:0;overflow-y:auto}
+.nav-item{display:block;padding:9px 18px;font-size:14px;color:var(--ink);border-left:3px solid transparent}
 .nav-item:hover{background:#f7f8fa}
 .nav-item.active{background:#fdeee9;color:var(--brand);border-left-color:var(--brand);font-weight:600}
+.nav-group{margin-bottom:8px}
+.nav-group-title{font-size:11px;color:var(--muted);padding:8px 18px 3px;letter-spacing:.5px;font-weight:600}
+.nav-group .nav-item{padding-left:28px;font-size:13px}
 .view{flex:1;padding:18px;overflow:auto}
 .loading,.empty{padding:24px;text-align:center;color:var(--muted)}
 .error{padding:20px;color:var(--up);background:#fdeaea;border-radius:8px}
@@ -42,6 +45,10 @@ a{color:inherit;text-decoration:none}
 .badges{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
 .badge{background:#f3f4f6;border-radius:14px;padding:5px 12px;font-size:13px}
 .badge.regime{background:#fdeee9;color:var(--brand)}
+.badge.b-up{background:#fdeee9;color:var(--up);font-weight:600}
+.pill{display:inline-block;background:#eef6ff;color:#1f6feb;border:1px solid #d6e8ff;border-radius:10px;padding:2px 8px;font-size:12px;margin:2px 4px 2px 0}
+.feats{max-width:360px;line-height:1.8}
+.muted{color:var(--muted)}
 .legend-row{margin-top:8px}.legend{font-size:12px;color:var(--muted);margin-right:12px}
 .legend .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:middle}
 .dot.red{background:var(--up)}.dot.grey{background:#cbd0d8}

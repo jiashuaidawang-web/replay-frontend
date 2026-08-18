@@ -20,12 +20,38 @@
 
   <div class="layout">
     <nav class="sidebar">
-      <a class="nav-item active" href="#/overview" data-mod="overview">总览看板</a>
-      <a class="nav-item" href="#/mainline" data-mod="mainline">主线·龙头</a>
-      <a class="nav-item" href="#/sentiment" data-mod="sentiment">情绪·资金</a>
-      <a class="nav-item" href="#/trend" data-mod="trend">趋势战法</a>
-      <a class="nav-item" href="#/theme" data-mod="theme">炒作题材</a>
-      <a class="nav-item" href="#/tradelog" data-mod="tradelog">个人复盘</a>
+      <div class="nav-group">
+        <div class="nav-group-title">总览看板</div>
+        <a class="nav-item" href="#/overview/timing" data-mod="overview/timing">大盘择时卡</a>
+        <a class="nav-item" href="#/overview/thermal" data-mod="overview/thermal">情绪温度计</a>
+        <a class="nav-item" href="#/overview/mainline" data-mod="overview/mainline">主线概览</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-title">主线·龙头</div>
+        <a class="nav-item" href="#/mainline/map" data-mod="mainline/map">题材主线地图</a>
+        <a class="nav-item" href="#/mainline/pool" data-mod="mainline/pool">龙头池 &amp; 板位演化</a>
+        <a class="nav-item" href="#/mainline/role" data-mod="mainline/role">龙 / 妖 / 独狼识别</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-title">情绪·资金</div>
+        <a class="nav-item" href="#/sentiment/pool" data-mod="sentiment/pool">每日涨跌停池</a>
+        <a class="nav-item" href="#/sentiment/flow" data-mod="sentiment/flow">板块资金流向</a>
+        <a class="nav-item" href="#/sentiment/dragon" data-mod="sentiment/dragon">主力合力 / 龙虎榜</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-title">趋势战法</div>
+        <a class="nav-item" href="#/trend/scan" data-mod="trend/scan">趋势股扫描</a>
+        <a class="nav-item" href="#/trend/lead" data-mod="trend/lead">领涨股监控</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-title">炒作题材</div>
+        <a class="nav-item" href="#/theme/factor" data-mod="theme/factor">题材库 &amp; 因子</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-title">个人复盘</div>
+        <a class="nav-item" href="#/tradelog/log" data-mod="tradelog/log">交易日志</a>
+        <a class="nav-item" href="#/tradelog/score" data-mod="tradelog/score">纪律 / 心法评分</a>
+      </div>
     </nav>
 
     <main id="view" class="view"><div class="loading">加载中…</div></main>

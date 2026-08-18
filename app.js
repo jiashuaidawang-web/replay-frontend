@@ -1,13 +1,16 @@
 /* 顿悟股道 · 复盘看板 M3 前端
  * 纯原生 JS，无外部依赖。调用 replay-backend (M2) REST API。
  * 后端默认 http://localhost:8090/api/v1
+ * 菜单：6 模块 / 14 子页（对齐设计文档 §1）。
  */
 const API_BASE = 'http://localhost:8090/api/v1';
 
 const state = {
   date: '',          // '' = 服务端取最新交易日
-  mod: 'overview',
+  mod: 'overview/timing',
   selectedBoard: null,
+  sentType: 'limit_up',
+  sentMinPos: 2,
 };
 
 /* ---------- 工具 ---------- */
@@ -124,13 +127,14 @@ function statCard(title, value, cls) {
 function section(title, html) {
   return `<section class="card"><h2 class="card-title">${esc(title)}</h2>${html}</section>`;
 }
+function setView(html) { document.getElementById('view').innerHTML = html; }
+function showError(e) {
+  setView('<div class="error">加载失败：' + esc(e.message) + '<br><small>请确认后端服务 http://localhost:8090 已启动。</small></div>');
+}
 
 /* ---------- 模块：总览看板 ---------- */
-async function renderOverview() {
+async function renderOverviewTiming() {
   const ov = await apiGet('/overview');
-  let se = null;
-  try { se = await apiGet('/sentiment'); } catch (e) { se = null; }
-
   const fd = ov.fourDim || {};
   const dims = [
     { name: '技术', val: fd.tech },
@@ -139,67 +143,66 @@ async function renderOverview() {
     { name: '政策', val: fd.policy },
   ];
   const legend = dims.map(d => `<span class="legend"><i class="dot ${d.val == null ? 'grey' : 'red'}"></i>${esc(d.name)} ${d.val == null ? '计算中' : Number(d.val).toFixed(2)}</span>`).join('');
+  setView(section('大盘择时 · 四维度评分（S1）', `
+    <div class="overview-grid">
+      <div>${radarSVG(dims)}<div class="legend-row">${legend}</div></div>
+      <div class="ov-right">
+        <div class="badges">
+          <span class="badge">周期判定：<b>${q((ov.cycle && ov.cycle.phase) || '—')}</b></span>
+          <span class="badge">牛熊：<b>${q((ov.cycle && ov.cycle.absolute) || '—')}</b></span>
+          <span class="badge regime">情绪区间：<b>${esc(ov.regime || '—')}</b></span>
+          <span class="badge">综合分：<b>${q(fd.composite == null ? '计算中' : Number(fd.composite).toFixed(2))}</b></span>
+        </div>
+        <div class="hint">技术/资金维依赖 S1 计算层（index_daily 等），当前显示"计算中"；情绪维已接入。S1 落地后本页即完整。</div>
+      </div>
+    </div>`));
+}
 
+async function renderOverviewThermal() {
+  let ov = null, se = null;
+  try { ov = await apiGet('/overview'); } catch (e) { ov = null; }
+  try { se = await apiGet('/sentiment'); } catch (e) { se = null; }
+  setView(section('情绪温度计（S2）', `
+    <div class="thermal-grid">
+      <div>${gaugeSVG(ov ? ov.thermal : 0)}<div class="thermal-cap">情绪温度（0-100）· 区间：${esc(ov ? (ov.regime || '—') : '—')}</div></div>
+      <div class="stat-row">
+        ${statCard('涨停家数', se ? q(se.limitUpCnt) : '—', se && se.limitUpCnt > 0 ? 'up' : '')}
+        ${statCard('跌停家数', se ? q(se.limitDownCnt) : '—', se && se.limitDownCnt > 0 ? 'down' : '')}
+        ${statCard('最高连板', se ? q(se.maxBoardPos) + ' 板' : '—', '')}
+        ${statCard('昨日涨停今表现', se && se.yestLimitRet != null ? fmtPct(se.yestLimitRet) : '—', se && se.yestLimitRet != null ? pctClass(se.yestLimitRet) : '')}
+      </div>
+    </div>`));
+}
+
+async function renderOverviewMainline() {
+  const ov = await apiGet('/overview');
   const topMl = (ov.topMainline || []).map(m => `
     <div class="bar-row">
       <span class="bar-name">${esc(m.boardName || m.boardCode)}</span>
       <span class="bar-track"><span class="bar-fill" style="width:${Math.min(100, Number(m.strength) || 0)}%"></span></span>
       <span class="bar-val">${q(m.strength)}<small> · ${esc(m.mainLevel || '')}</small></span>
     </div>`).join('') || '<div class="empty">无主线数据</div>';
-
-  const html = `
-    ${section('大盘择时 · 四维度评分', `
-      <div class="overview-grid">
-        <div>${radarSVG(dims)}<div class="legend-row">${legend}</div></div>
-        <div class="ov-right">
-          <div class="badges">
-            <span class="badge">周期判定：<b>${q((ov.cycle && ov.cycle.phase) || '—')}</b></span>
-            <span class="badge">牛熊：<b>${q((ov.cycle && ov.cycle.absolute) || '—')}</b></span>
-            <span class="badge regime">情绪区间：<b>${esc(ov.regime || '—')}</b></span>
-            <span class="badge">综合分：<b>${q(fd.composite == null ? '计算中' : Number(fd.composite).toFixed(2))}</b></span>
-          </div>
-          <div class="hint">技术/资金/政策三维依赖 S1 计算层（index_daily 等），当前未实现，显示"计算中"。</div>
-        </div>
-      </div>`)}
-    ${section('情绪温度计', `
-      <div class="thermal-grid">
-        <div>${gaugeSVG(ov.thermal)}<div class="thermal-cap">情绪温度（0-100）· 区间：${esc(ov.regime || '—')}</div></div>
-        <div class="stat-row">
-          ${statCard('涨停家数', se ? q(se.limitUpCnt) : '—', se && se.limitUpCnt > 0 ? 'up' : '')}
-          ${statCard('跌停家数', se ? q(se.limitDownCnt) : '—', se && se.limitDownCnt > 0 ? 'down' : '')}
-          ${statCard('最高连板', se ? q(se.maxBoardPos) + ' 板' : '—', '')}
-          ${statCard('昨日涨停今表现', se && se.yestLimitRet != null ? fmtPct(se.yestLimitRet) : '—', se && se.yestLimitRet != null ? pctClass(se.yestLimitRet) : '')}
-        </div>
-      </div>`)}
-    ${section('主线概览（Top ' + (ov.topMainline || []).length + '）', `<div class="bars">${topMl}</div>`)}
-  `;
-  setView(html);
+  setView(section('主线概览（Top ' + (ov.topMainline || []).length + '，S4）', `<div class="bars">${topMl}</div><div class="hint">完整主线列表见「主线·龙头 / 题材主线地图」。</div>`));
 }
 
 /* ---------- 模块：主线·龙头 ---------- */
-async function renderMainline() {
+async function renderMainlineMap() {
   const list = await apiGet('/mainline');
   const rows = list.map(m => `
     <tr class="clickable" data-board="${esc(m.boardCode)}">
       <td>${m.rank}</td>
       <td><b>${esc(m.boardName || m.boardCode)}</b><br><small>${esc(m.boardCode)}</small></td>
-      <td><span class="tag level-${esc((m.mainLevel || '').replace('线',''))}">${esc(m.mainLevel || '—')}</span></td>
+      <td><span class="tag level-${esc((m.mainLevel || '').replace('线', ''))}">${esc(m.mainLevel || '—')}</span></td>
       <td><span class="bar-track sm"><span class="bar-fill" style="width:${Math.min(100, Number(m.strength) || 0)}%"></span></span> <span class="bar-val">${q(m.strength)}</span></td>
     </tr>`).join('') || '<tr><td colspan="4" class="empty">无主线数据</td></tr>';
-
-  const html = `
-    ${section('题材主线地图（板块强弱排序）', `
-      <table class="tbl">
-        <thead><tr><th>排名</th><th>板块</th><th>级别</th><th>强度</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-      <div class="hint">点击任意板块，下方查看龙头池与买卖建议。</div>`)}
-    <div id="boardDetail"></div>
-  `;
-  setView(html);
-  if (state.selectedBoard) loadBoardDetail(state.selectedBoard);
+  setView(section('题材主线地图（板块强弱排序，S4）', `
+    <table class="tbl">
+      <thead><tr><th>排名</th><th>板块</th><th>级别</th><th>强度</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="hint">点击板块可跳到「龙头池 & 板位演化」。</div>`));
   document.querySelectorAll('#view tr.clickable').forEach(tr => {
-    tr.addEventListener('click', () => { state.selectedBoard = tr.getAttribute('data-board'); loadBoardDetail(state.selectedBoard); });
+    tr.addEventListener('click', () => { location.hash = '#/mainline/pool?b=' + encodeURIComponent(tr.getAttribute('data-board')); });
   });
 }
 
@@ -224,7 +227,6 @@ async function loadBoardDetail(boardCode) {
         <td class="idea">${esc(idea.idea || '—')}<br><small>风险：${esc(idea.riskLevel || '—')} · ${esc(idea.note || '')}</small></td>
       </tr>`;
     }).join('') || '<tr><td colspan="5" class="empty">该板块无龙头候选</td></tr>';
-
     box.innerHTML = section('龙头池 & 板位演化 · ' + esc(boardCode), `
       <table class="tbl">
         <thead><tr><th>个股</th><th>角色</th><th>板位</th><th>龙头相评分</th><th>买卖建议(S5)</th></tr></thead>
@@ -235,17 +237,50 @@ async function loadBoardDetail(boardCode) {
   }
 }
 
-/* ---------- 模块：情绪·资金 ---------- */
-async function renderSentiment() {
-  const se = await apiGet('/sentiment');
-  const type = (state.sentType || 'limit_up');
-  const minPos = (state.sentMinPos || 2);
-  const [pool, flow, dt] = await Promise.all([
-    apiGet('/limit-pool?type=' + type + '&minPos=' + minPos).catch(() => []),
-    apiGet('/fund-flow/board?top=12').catch(() => []),
-    apiGet('/fund-flow/dragon-tiger').catch(() => []),
-  ]);
+async function renderMainlinePool() {
+  const list = await apiGet('/mainline');
+  const boards = list || [];
+  const params = new URLSearchParams(location.hash.split('?')[1] || '');
+  const sel = params.get('b') || state.selectedBoard || (boards[0] && boards[0].boardCode);
+  setView(section('龙头池 & 板位演化（S4/S5）', `
+    <div class="filters">
+      <label>选择板块
+        <select id="poolBoard">${boards.map(b => `<option value="${esc(b.boardCode)}" ${b.boardCode === sel ? 'selected' : ''}>${esc(b.boardName || b.boardCode)}</option>`).join('')}</select>
+      </label>
+    </div>
+    <div id="boardDetail"><div class="loading">加载龙头池…</div></div>`));
+  if (sel) { state.selectedBoard = sel; loadBoardDetail(sel); }
+  const sb = document.getElementById('poolBoard');
+  if (sb) sb.addEventListener('change', () => { state.selectedBoard = sb.value; loadBoardDetail(sb.value); });
+}
 
+async function renderMainlineRole() {
+  let leaders = [];
+  try { leaders = await apiGet('/leaders'); } catch (e) { leaders = []; }
+  const groups = [
+    { key: '龙', title: '龙相梯队（龙一~龙五，有同板块跟风）' },
+    { key: '妖', title: '妖（纯连板无板块，S4 待增强）' },
+    { key: '独狼', title: '独狼（独立走势，S4 待增强）' },
+  ];
+  const blocks = groups.map(g => {
+    const items = leaders.filter(l => (l.role || '').includes(g.key));
+    const rows = items.map(l => `
+      <tr>
+        <td><b>${esc(l.stockName || l.tsCode)}</b><br><small>${esc(l.tsCode)}</small></td>
+        <td>${esc(l.boardName || '—')}</td>
+        <td>${q(l.boardPos) + (l.boardPos ? ' 板' : '')}</td>
+        <td><span class="bar-track sm"><span class="bar-fill" style="width:${Math.min(100, Number(l.score) || 0)}%"></span></span> <span class="bar-val">${q(l.score)}</span></td>
+      </tr>`).join('') || '<tr><td colspan="4" class="empty">无</td></tr>';
+    return section(g.title + '（' + items.length + ' 只）', `<table class="tbl"><thead><tr><th>个股</th><th>板块</th><th>板位</th><th>龙头相评分</th></tr></thead><tbody>${rows}</tbody></table>`);
+  }).join('');
+  setView(section('龙 / 妖 / 独狼识别（S4）', blocks + '<div class="hint">识别依据：role 字段由 S4 计算层标注。当前数据 role 仅含龙相梯队（龙一~龙五，按板位排序）；妖/独狼（无板块纯连板）识别为 S4 后续增强项。</div>'));
+}
+
+/* ---------- 模块：情绪·资金 ---------- */
+async function renderSentimentPool() {
+  const type = state.sentType;
+  const minPos = state.sentMinPos;
+  const pool = await apiGet('/limit-pool?type=' + type + '&minPos=' + minPos).catch(() => []);
   const poolRows = (pool || []).map(p => `
     <tr>
       <td><b>${esc(p.stockName || p.tsCode)}</b><br><small>${esc(p.tsCode)}</small></td>
@@ -255,7 +290,23 @@ async function renderSentiment() {
       <td class="${pctClass(p.pctChg)}">${fmtPct(p.pctChg)}</td>
       <td>${fmtMoney(p.amount)}</td>
     </tr>`).join('') || '<tr><td colspan="6" class="empty">无涨跌停数据</td></tr>';
+  setView(section('每日涨跌停池（S2）', `
+    <div class="filters">
+      <label>类型<select id="poolType"><option value="limit_up" ${type === 'limit_up' ? 'selected' : ''}>涨停</option><option value="limit_down" ${type === 'limit_down' ? 'selected' : ''}>跌停</option></select></label>
+      <label>最低连板<input type="number" id="poolMin" min="1" value="${minPos}" /></label>
+      <button class="btn" id="poolGo">查询</button>
+    </div>
+    <table class="tbl"><thead><tr><th>个股</th><th>板块</th><th>板位</th><th>风格</th><th>涨跌幅</th><th>成交额</th></tr></thead><tbody>${poolRows}</tbody></table>`));
+  const go = document.getElementById('poolGo');
+  if (go) go.addEventListener('click', () => {
+    state.sentType = document.getElementById('poolType').value;
+    state.sentMinPos = document.getElementById('poolMin').value || 1;
+    renderSentimentPool();
+  });
+}
 
+async function renderSentimentFlow() {
+  const flow = await apiGet('/fund-flow/board?top=20').catch(() => []);
   const flowRows = (flow || []).map(f => `
     <tr>
       <td><b>${esc(f.boardName || f.boardCode)}</b><br><small>${esc(f.boardCode)}</small></td>
@@ -264,9 +315,15 @@ async function renderSentiment() {
       <td class="${netClass(f.bigNet)}">${fmtMoney(f.bigNet)}</td>
       <td><span class="up">${q(f.upCount)}</span> / <span class="down">${q(f.downCount)}</span></td>
     </tr>`).join('') || '<tr><td colspan="5" class="empty">无板块资金流</td></tr>';
+  setView(section('板块资金流向 · 主力净流入排行（S3）', `
+    <table class="tbl"><thead><tr><th>板块</th><th>主力净流入</th><th>超大单</th><th>大单</th><th>涨/跌家数</th></tr></thead><tbody>${flowRows}</tbody></table>
+    <div class="hint">数据来源 main_fund_flow（板块级）；净流入 = 超大单 + 大单。</div>`));
+}
 
+async function renderSentimentDragon() {
+  const dt = await apiGet('/fund-flow/dragon-tiger').catch(() => []);
   const dtRows = (dt || []).map(d => `
-    <tr>
+    <tr class="clickable" data-code="${esc(d.tsCode)}">
       <td><b>${esc(d.stockName || d.tsCode)}</b><br><small>${esc(d.tsCode)}</small></td>
       <td title="${esc(d.reason || '')}">${esc((d.reason || '').slice(0, 24))}</td>
       <td class="${netClass(d.netBuy)}">${fmtMoney(d.netBuy)}</td>
@@ -274,70 +331,86 @@ async function renderSentiment() {
       <td>${d.closePrice != null ? Number(d.closePrice).toFixed(2) : '—'}</td>
       <td>${fmtMoney(d.freeMarketCap)}</td>
     </tr>`).join('') || '<tr><td colspan="6" class="empty">无龙虎榜</td></tr>';
-
-  const html = `
-    ${section('情绪温度计', `
-      <div class="thermal-grid">
-        <div>${gaugeSVG(se.thermal)}<div class="thermal-cap">区间：${esc(se.regime || '—')}</div></div>
-        <div class="stat-row">
-          ${statCard('涨停家数', q(se.limitUpCnt), 'up')}
-          ${statCard('跌停家数', q(se.limitDownCnt), 'down')}
-          ${statCard('最高连板', q(se.maxBoardPos) + ' 板', '')}
-          ${statCard('昨日涨停今表现', se.yestLimitRet != null ? fmtPct(se.yestLimitRet) : '—', se.yestLimitRet != null ? pctClass(se.yestLimitRet) : '')}
-        </div>
-      </div>`)}
-    ${section('每日涨跌停池', `
-      <div class="filters">
-        <label>类型
-          <select id="poolType">
-            <option value="limit_up" ${type === 'limit_up' ? 'selected' : ''}>涨停</option>
-            <option value="limit_down" ${type === 'limit_down' ? 'selected' : ''}>跌停</option>
-          </select>
-        </label>
-        <label>最低连板
-          <input type="number" id="poolMin" min="1" value="${minPos}" />
-        </label>
-        <button class="btn" id="poolGo">查询</button>
-      </div>
-      <table class="tbl">
-        <thead><tr><th>个股</th><th>板块</th><th>板位</th><th>风格</th><th>涨跌幅</th><th>成交额</th></tr></thead>
-        <tbody>${poolRows}</tbody>
-      </table>`)}
-    ${section('板块资金流向（主力净流入排行）', `
-      <table class="tbl">
-        <thead><tr><th>板块</th><th>主力净流入</th><th>超大单</th><th>大单</th><th>涨/跌家数</th></tr></thead>
-        <tbody>${flowRows}</tbody>
-      </table>`)}
-    ${section('龙虎榜（主力合力）', `
-      <table class="tbl">
-        <thead><tr><th>个股</th><th>上榜原因</th><th>净买入</th><th>涨跌幅</th><th>收盘价</th><th>流通市值</th></tr></thead>
-        <tbody>${dtRows}</tbody>
-      </table>
-      <div class="hint">龙虎榜仅提示资金合力方向，不构成席位迷信——结合板块强度综合判断。</div>`)}
-  `;
-  setView(html);
-  const go = document.getElementById('poolGo');
-  if (go) go.addEventListener('click', () => {
-    state.sentType = document.getElementById('poolType').value;
-    state.sentMinPos = document.getElementById('poolMin').value || 1;
-    renderSentiment();
+  setView(section('龙虎榜 · 主力合力（S3）', `
+    <table class="tbl"><thead><tr><th>个股</th><th>上榜原因</th><th>净买入</th><th>涨跌幅</th><th>收盘价</th><th>流通市值</th></tr></thead><tbody>${dtRows}</tbody></table>
+    <div id="dtDetail"></div>
+    <div class="hint">龙虎榜仅提示资金合力方向，不构成席位迷信——结合板块强度综合判断。</div>`));
+  document.querySelectorAll('#view tr.clickable').forEach(tr => {
+    tr.addEventListener('click', async () => {
+      const box = document.getElementById('dtDetail');
+      box.innerHTML = '<div class="loading">加载席位明细…</div>';
+      try {
+        const det = await apiGet('/fund-flow/dragon-tiger/detail?tsCode=' + encodeURIComponent(tr.getAttribute('data-code')));
+        box.innerHTML = section('席位明细', '<table class="tbl"><thead><tr><th>席位</th><th>类型</th><th>买入</th><th>卖出</th><th>净买</th></tr></thead><tbody>' +
+          (det || []).map(x => `<tr><td>${esc(x.seatName || '—')}</td><td>${esc(x.seatType || '—')}</td><td>${fmtMoney(x.buy)}</td><td>${fmtMoney(x.sell)}</td><td class="${netClass(x.netBuy)}">${fmtMoney(x.netBuy)}</td></tr>`).join('') +
+          '</tbody></table>');
+      } catch (e) { box.innerHTML = '<div class="error">明细加载失败</div>'; }
+    });
   });
 }
 
-/* ---------- 模块：趋势战法（S6 占位） ---------- */
-async function renderTrend() {
-  setView(section('趋势战法（S6）', `
-    <div class="placeholder">
-      <div class="ph-icon">📈</div>
-      <h3>计算层尚未实现</h3>
-      <p>趋势股扫描依赖 <code>trend_candidate_daily</code>（需 <code>stock_weekly</code> 历史周线 + S6 八大技术特征算法）。</p>
-      <p>当前接口 <code>GET /api/v1/trend/scan</code> 返回空数组 <code>[]</code>。</p>
-      <p class="hint">待 M1 计算层补齐 S6 后，本页将展示"命中特征数 ≥ 6 且站上牛熊线"的趋势龙头股。</p>
-    </div>`));
+/* ---------- 模块：趋势战法（S6 真实渲染） ---------- */
+function featPills(arr) {
+  if (!arr || !arr.length) return '<span class="muted">—</span>';
+  return arr.map(f => `<span class="pill">${esc(f)}</span>`).join(' ');
+}
+async function renderTrendScan() {
+  let list = [];
+  try { list = await apiGet('/trend/scan?minFeature=5'); } catch (e) { list = []; }
+  if (!list || !list.length) {
+    setView(section('趋势股扫描（S6）', `
+      <div class="placeholder"><div class="ph-icon">📈</div><h3>暂无趋势候选</h3>
+      <p>需先跑计算层（S6 八大技术特征）。启动 replay-backend 会对最新交易日自动计算 <code>trend_candidate_daily</code>。</p>
+      <p class="hint">接口 <code>GET /api/v1/trend/scan</code> 当前返回空。</p></div>`));
+    return;
+  }
+  const rows = list.map((t, i) => `
+    <tr class="${t.confirmed ? 'top' : ''}">
+      <td>${i + 1}</td>
+      <td><b>${esc(t.stockName || t.tsCode)}</b><br><small>${esc(t.tsCode)}</small></td>
+      <td><span class="badge ${t.featureHit >= 6 ? 'b-up' : ''}">${q(t.featureHit)}/8</span></td>
+      <td>${t.confirmed ? '<span class="badge b-up">趋势成立</span>' : '<span class="badge">观察</span>'}</td>
+      <td>${bar(t.rsVsIndex)}</td>
+      <td class="${pctClass(t.gainFromBottom)}">${q(t.gainFromBottom)}%</td>
+      <td>${q(t.rsi)}</td>
+      <td class="feats">${featPills(t.hitFeatures)}</td>
+    </tr>`).join('');
+  setView(section('趋势股扫描（S6）· 八大技术特征命中（minFeature≥5）', `
+    <table class="tbl">
+      <thead><tr><th>#</th><th>个股</th><th>命中</th><th>趋势确认</th><th>RS相对指数</th><th>自底涨幅</th><th>RSI</th><th>命中特征</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="hint">特征：①长期均线多头 ②漂亮图形 ③健康量价 ④小盘子(无市值数据→N/A) ⑤RS强度 ⑥RSI突破70 ⑦周线确认 ⑧底部平台突破；趋势成立 = ①+②+自底涨幅&gt;25%。数据来自 <code>stock_weekly</code> 周线。</div>`));
+}
+async function renderTrendLead() {
+  let list = [];
+  try { list = await apiGet('/trend/leading?minFeature=4'); } catch (e) { list = []; }
+  if (!list || !list.length) {
+    setView(section('领涨股监控（S6）', `
+      <div class="placeholder"><div class="ph-icon">📊</div><h3>暂无领涨信号</h3>
+      <p>接口 <code>GET /api/v1/trend/leading</code> 当前返回空（趋势候选不足）。</p></div>`));
+    return;
+  }
+  const rows = list.slice(0, 40).map((t, i) => `
+    <tr class="${t.confirmed ? 'top' : ''}">
+      <td>${i + 1}</td>
+      <td><b>${esc(t.stockName || t.tsCode)}</b><br><small>${esc(t.tsCode)}</small></td>
+      <td class="${pctClass(t.gainFromBottom)}">${q(t.gainFromBottom)}%</td>
+      <td><span class="badge ${t.featureHit >= 6 ? 'b-up' : ''}">${q(t.featureHit)}/8</span></td>
+      <td>${bar(t.rsVsIndex)}</td>
+      <td>${t.confirmed ? '<span class="badge b-up">趋势成立</span>' : '<span class="badge">观察</span>'}</td>
+      <td class="feats">${featPills(t.hitFeatures)}</td>
+    </tr>`).join('');
+  setView(section('领涨股监控（S6）· 拐点先行（按自底涨幅降序，minFeature≥4）', `
+    <table class="tbl">
+      <thead><tr><th>#</th><th>个股</th><th>自底涨幅</th><th>命中</th><th>RS相对指数</th><th>趋势确认</th><th>命中特征</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="hint">领涨股 = 自大底最低点以来涨幅领先、且技术特征命中较多者，用于监控"先于指数止跌、拐点先行"的机构趋势牛。</div>`));
 }
 
 /* ---------- 模块：炒作题材（S7 真实渲染） ---------- */
-async function renderTheme() {
+async function renderThemeFactor() {
   let list = [];
   try { list = await apiGet('/theme/factor'); } catch (e) { list = []; }
   if (!list || !list.length) {
@@ -350,7 +423,6 @@ async function renderTheme() {
       </div>`));
     return;
   }
-
   const rows = list.map((t, i) => `
     <tr class="clickable ${i === 0 ? 'top' : ''}" data-code="${esc(t.boardCode)}">
       <td>${i + 1}</td>
@@ -362,17 +434,13 @@ async function renderTheme() {
       <td>${bar(t.certainty)}</td>
       <td>${bar(t.minResist)}</td>
     </tr>`).join('');
-
-  const html = `
-    ${section('题材库 · 炒作因子评分（按综合分降序）', `
-      <table class="tbl">
-        <thead><tr><th>#</th><th>题材</th><th>综合分</th><th>稀缺</th><th>想象</th><th>突发</th><th>确定</th><th>最小阻力</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-      <div class="hint">综合分 = 五因子加权（各 0.2 等权）×100；点击任意题材查看五维雷达。</div>`)}
-    <div id="themeDetail"></div>
-  `;
-  setView(html);
+  setView(section('题材库 · 炒作因子评分（按综合分降序，S7）', `
+    <table class="tbl">
+      <thead><tr><th>#</th><th>题材</th><th>综合分</th><th>稀缺</th><th>想象</th><th>突发</th><th>确定</th><th>最小阻力</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="hint">综合分 = 五因子加权（各 0.2 等权）×100；点击任意题材查看五维雷达。</div>
+    <div id="themeDetail"></div>`));
   renderThemeDetail(list[0]);
   document.querySelectorAll('#view tr.clickable').forEach(tr => {
     tr.addEventListener('click', () => {
@@ -382,7 +450,6 @@ async function renderTheme() {
     });
   });
 }
-
 function renderThemeDetail(t) {
   const box = document.getElementById('themeDetail');
   if (!box || !t) return;
@@ -414,7 +481,7 @@ function renderThemeDetail(t) {
 }
 
 /* ---------- 模块：个人复盘（S8） ---------- */
-async function renderTradelog() {
+async function renderTradelogLog() {
   setView(section('个人复盘 · 交易日志（S8）', `
     <div class="tradelog">
       <form id="logForm" class="log-form">
@@ -472,25 +539,35 @@ async function loadLogList() {
       list.map(r => `<tr><td>${q(r.trade_date)}</td><td>${esc(r.ts_code || '')}</td><td>${esc(r.side || '')}</td><td>${q(r.price)}</td><td>${q(r.qty)}</td><td>${esc(r.reason || '')}</td><td>${esc(r.emotion_tag || '')}</td><td>${esc(r.应对 || '')}</td></tr>`).join('') + '</tbody></table>';
   } catch (e) { box.innerHTML = '<div class="empty">读取失败：' + esc(e.message) + '</div>'; }
 }
+async function renderTradelogScore() {
+  setView(section('纪律 / 心法评分（S8，待实现）', `
+    <div class="placeholder"><div class="ph-icon">🧭</div><h3>计算层尚未实现</h3>
+    <p>纪律评分依赖 <code>trade_log</code> 表（买卖记录 + 心态/应对标签），由 S8 计算层量化"是否破个股思维、应对三态执行度"。</p>
+    <p class="hint">待 S8 落地后，本页展示每笔交易的纪律评分与心法执行度。</p></div>`));
+}
 
 /* ---------- 路由 ---------- */
 const ROUTES = {
-  overview: renderOverview,
-  mainline: renderMainline,
-  sentiment: renderSentiment,
-  trend: renderTrend,
-  theme: renderTheme,
-  tradelog: renderTradelog,
+  'overview/timing': renderOverviewTiming,
+  'overview/thermal': renderOverviewThermal,
+  'overview/mainline': renderOverviewMainline,
+  'mainline/map': renderMainlineMap,
+  'mainline/pool': renderMainlinePool,
+  'mainline/role': renderMainlineRole,
+  'sentiment/pool': renderSentimentPool,
+  'sentiment/flow': renderSentimentFlow,
+  'sentiment/dragon': renderSentimentDragon,
+  'trend/scan': renderTrendScan,
+  'trend/lead': renderTrendLead,
+  'theme/factor': renderThemeFactor,
+  'tradelog/log': renderTradelogLog,
+  'tradelog/score': renderTradelogScore,
 };
-function setView(html) { document.getElementById('view').innerHTML = html; }
-function showError(e) {
-  setView('<div class="error">加载失败：' + esc(e.message) + '<br><small>请确认后端服务 http://localhost:8090 已启动。</small></div>');
-}
 async function route() {
-  const h = location.hash.replace('#/', '') || 'overview';
+  const h = (location.hash.replace('#/', '').split('?')[0]) || 'overview/timing';
   state.mod = h;
   document.querySelectorAll('.nav-item').forEach(a => a.classList.toggle('active', a.getAttribute('data-mod') === h));
-  try { await (ROUTES[h] || renderOverview)(); }
+  try { await (ROUTES[h] || renderOverviewTiming)(); }
   catch (e) { showError(e); }
 }
 async function pingApi() {
