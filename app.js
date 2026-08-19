@@ -143,6 +143,7 @@ async function renderOverviewTiming() {
     { name: '政策', val: fd.policy },
   ];
   const legend = dims.map(d => `<span class="legend"><i class="dot ${d.val == null ? 'grey' : 'red'}"></i>${esc(d.name)} ${d.val == null ? '计算中' : Number(d.val).toFixed(2)}</span>`).join('');
+  const worth = ov.worthTrade === 1;
   setView(section('大盘择时 · 四维度评分（S1）', `
     <div class="overview-grid">
       <div>${radarSVG(dims)}<div class="legend-row">${legend}</div></div>
@@ -150,10 +151,13 @@ async function renderOverviewTiming() {
         <div class="badges">
           <span class="badge">周期判定：<b>${q((ov.cycle && ov.cycle.phase) || '—')}</b></span>
           <span class="badge">牛熊：<b>${q((ov.cycle && ov.cycle.absolute) || '—')}</b></span>
+          <span class="badge">相对强弱：<b>${q((ov.cycle && ov.cycle.relative) || '—')}</b></span>
           <span class="badge regime">情绪区间：<b>${esc(ov.regime || '—')}</b></span>
           <span class="badge">综合分：<b>${q(fd.composite == null ? '计算中' : Number(fd.composite).toFixed(2))}</b></span>
+          <span class="badge ${worth ? 'ok' : 'warn'}">值得参与：<b>${worth ? '是' : '否'}</b></span>
         </div>
-        <div class="hint">技术/资金维依赖 S1 计算层（index_daily 等），当前显示"计算中"；情绪维已接入。S1 落地后本页即完整。</div>
+        <div class="suggestion"><b>策略建议：</b>${esc(ov.suggestion || '—')}</div>
+        ${ov.note ? `<div class="hint">数据口径：${esc(ov.note)}</div>` : ''}
       </div>
     </div>`));
 }
@@ -259,21 +263,37 @@ async function renderMainlineRole() {
   try { leaders = await apiGet('/leaders'); } catch (e) { leaders = []; }
   const groups = [
     { key: '龙', title: '龙相梯队（龙一~龙五，有同板块跟风）' },
-    { key: '妖', title: '妖（纯连板无板块，S4 待增强）' },
-    { key: '独狼', title: '独狼（独立走势，S4 待增强）' },
+    { key: '妖', title: '妖股（脱离板块·纯情绪博弈的市场高度龙）' },
+    { key: '独狼', title: '独狼（无板块支撑·独立换手走强的活口）' },
   ];
+  const fmtAmt = (a) => {
+    if (a == null) return '—';
+    const v = Number(a);
+    if (!isFinite(v) || v <= 0) return '—';
+    if (v >= 1e8) return (v / 1e8).toFixed(2) + '亿';
+    if (v >= 1e4) return (v / 1e4).toFixed(0) + '万';
+    return v.toFixed(0);
+  };
   const blocks = groups.map(g => {
-    const items = leaders.filter(l => (l.role || '').includes(g.key));
+    const items = (leaders || []).filter(l =>
+      (l.cat || '') === g.key || (l.role || '').indexOf(g.key) >= 0);
     const rows = items.map(l => `
       <tr>
         <td><b>${esc(l.stockName || l.tsCode)}</b><br><small>${esc(l.tsCode)}</small></td>
-        <td>${esc(l.boardName || '—')}</td>
+        <td>${esc(l.boardName || (l.boardCode || '独立'))}</td>
         <td>${q(l.boardPos) + (l.boardPos ? ' 板' : '')}</td>
+        <td>${esc(l.limitStyle || '—')}</td>
+        <td class="amt">${fmtAmt(l.amount)}</td>
         <td><span class="bar-track sm"><span class="bar-fill" style="width:${Math.min(100, Number(l.score) || 0)}%"></span></span> <span class="bar-val">${q(l.score)}</span></td>
-      </tr>`).join('') || '<tr><td colspan="4" class="empty">无</td></tr>';
-    return section(g.title + '（' + items.length + ' 只）', `<table class="tbl"><thead><tr><th>个股</th><th>板块</th><th>板位</th><th>龙头相评分</th></tr></thead><tbody>${rows}</tbody></table>`);
+        <td class="note">${esc(l.note || '—')}</td>
+      </tr>`).join('') || `<tr><td colspan="7" class="empty">无（当日无脱离板块的独立高度股）</td></tr>`;
+    return section(g.title + '（' + items.length + ' 只）',
+      `<table class="tbl"><thead><tr><th>个股</th><th>板块</th><th>板位</th><th>风格</th><th>成交额</th><th>评分</th><th>判定说明</th></tr></thead><tbody>${rows}</tbody></table>`);
   }).join('');
-  setView(section('龙 / 妖 / 独狼识别（S4）', blocks + '<div class="hint">识别依据：role 字段由 S4 计算层标注。当前数据 role 仅含龙相梯队（龙一~龙五，按板位排序）；妖/独狼（无板块纯连板）识别为 S4 后续增强项。</div>'));
+  const banner = `<div class="hint strong">板学寻龙·猎物三分：<b>龙</b>=有板块团体属性（下面有一群小弟，靠主线合力上位）；`
+    + `<b>妖</b>=脱离板块、纯情绪博弈的市场高度龙（钱少炒不动板块才出妖，常跨多题材、换手充分、人气极高）；`
+    + `<b>独狼</b>=无板块支撑、靠自身逻辑独立走强的换手股（从题材活口走出）。妖/独狼由 S4 计算层按「脱离板块＋连板高度/跨题材数」自动标注，与龙互斥。</div>`;
+  setView(section('龙 / 妖 / 独狼识别（S4）', banner + blocks));
 }
 
 /* ---------- 模块：情绪·资金 ---------- */
@@ -321,32 +341,91 @@ async function renderSentimentFlow() {
 }
 
 async function renderSentimentDragon() {
-  const dt = await apiGet('/fund-flow/dragon-tiger').catch(() => []);
-  const dtRows = (dt || []).map(d => `
+  const [stocks, seats, dt] = await Promise.all([
+    apiGet('/main-force/stocks').catch(() => []),
+    apiGet('/main-force/seats').catch(() => []),
+    apiGet('/fund-flow/dragon-tiger').catch(() => [])
+  ]);
+  const sList = stocks || [];
+  const seatList = seats || [];
+  const dtList = dt || [];
+
+  // 主力净买后次日胜 / 被埋（破除主力至上论的核心证据）
+  const win = sList.filter(x => x.credibilityFlag === 1).length;
+  const trapped = sList.filter(x => x.credibilityFlag === 0).length;
+  const judged = win + trapped;
+  const winRate = judged ? (win / judged * 100).toFixed(0) : '—';
+
+  const stockRows = sList.map(d => `
+    <tr class="clickable" data-code="${esc(d.tsCode)}">
+      <td><b>${esc(d.stockName || d.tsCode)}</b><br><small>${esc(d.tsCode)}</small></td>
+      <td class="${netClass(d.netBuy)}">${fmtMoney(d.netBuy)}</td>
+      <td class="${netClass(d.orgNetBuy)}">${fmtMoney(d.orgNetBuy)}</td>
+      <td class="${netClass(d.youziNetBuy)}">${fmtMoney(d.youziNetBuy)}</td>
+      <td>${d.consensusScore != null ? Number(d.consensusScore).toFixed(2) : '—'}</td>
+      <td>${d.divergenceFlag === 1 ? '<span class="tag warn">分歧</span>' : '<span class="tag ok">一致</span>'}</td>
+      <td>${credCell(d.credibilityFlag, d.d1Return)}</td>
+    </tr>`).join('') || '<tr><td colspan="7" class="empty">无主力博弈数据（先跑 /admin/recalc）</td></tr>';
+
+  const seatRows = seatList.map(x => `
+    <tr>
+      <td><b>${esc(x.seatName || '—')}</b></td>
+      <td><span class="tag">${esc(x.seatType || '—')}</span></td>
+      <td><b>${q(x.stockCnt)}</b> 只</td>
+      <td class="${netClass(x.netBuy)}">${fmtMoney(x.netBuy)}</td>
+    </tr>`).join('') || '<tr><td colspan="4" class="empty">无抱团席位</td></tr>';
+
+  const dtRows = dtList.map(d => `
     <tr class="clickable" data-code="${esc(d.tsCode)}">
       <td><b>${esc(d.stockName || d.tsCode)}</b><br><small>${esc(d.tsCode)}</small></td>
       <td title="${esc(d.reason || '')}">${esc((d.reason || '').slice(0, 24))}</td>
       <td class="${netClass(d.netBuy)}">${fmtMoney(d.netBuy)}</td>
       <td>${d.changeRate != null ? Number(d.changeRate).toFixed(2) + '%' : '—'}</td>
       <td>${d.closePrice != null ? Number(d.closePrice).toFixed(2) : '—'}</td>
-      <td>${fmtMoney(d.freeMarketCap)}</td>
-    </tr>`).join('') || '<tr><td colspan="6" class="empty">无龙虎榜</td></tr>';
-  setView(section('龙虎榜 · 主力合力（S3）', `
-    <table class="tbl"><thead><tr><th>个股</th><th>上榜原因</th><th>净买入</th><th>涨跌幅</th><th>收盘价</th><th>流通市值</th></tr></thead><tbody>${dtRows}</tbody></table>
+    </tr>`).join('') || '<tr><td colspan="5" class="empty">无龙虎榜</td></tr>';
+
+  setView(section('主力博弈 · 龙虎榜合力（S3）', `
+    <div class="s3-banner">
+      <div class="s3-stat"><b>${sList.length}</b><small>上榜个股</small></div>
+      <div class="s3-stat up"><b>${win}</b><small>主力净买后次日涨(胜)</small></div>
+      <div class="s3-stat ${trapped > 0 ? 'down' : ''}"><b>${trapped}</b><small>主力被埋(次日跌)</small></div>
+      <div class="s3-stat"><b>${winRate}%</b><small>已判定胜率</small></div>
+    </div>
+    <div class="hint strong">⚠️ 有主力净买入 ≠ 必涨：本窗口 ${judged} 只可判定个股中 <b>${trapped} 只次日被埋</b>——主力也是博弈方，龙虎榜是合力结果而非必赢信号。须结合主线强度(S4)与情绪(S2)综合研判，切忌迷信席位。</div>
+
+    <h3 class="sub">主力合力排行（按净买入降序）</h3>
+    <table class="tbl"><thead><tr><th>个股</th><th>净买入</th><th>机构净买</th><th>游资净买</th><th>合力强度</th><th>分歧/一致</th><th>主力次日</th></tr></thead><tbody>${stockRows}</tbody></table>
+
+    <h3 class="sub">抱团席位（同一席位横跨多只上榜股 = 资金合力/联动）</h3>
+    <table class="tbl"><thead><tr><th>席位</th><th>类型</th><th>涉及股数</th><th>区间净买</th></tr></thead><tbody>${seatRows}</tbody></table>
+
+    <h3 class="sub">龙虎榜原始明细（点个股展开席位）</h3>
+    <table class="tbl"><thead><tr><th>个股</th><th>上榜原因</th><th>净买入</th><th>涨跌幅</th><th>收盘价</th></tr></thead><tbody>${dtRows}</tbody></table>
     <div id="dtDetail"></div>
-    <div class="hint">龙虎榜仅提示资金合力方向，不构成席位迷信——结合板块强度综合判断。</div>`));
+  `));
+
+  // 点击个股 → 展开该票席位明细（原龙虎榜下钻保留）
   document.querySelectorAll('#view tr.clickable').forEach(tr => {
     tr.addEventListener('click', async () => {
       const box = document.getElementById('dtDetail');
       box.innerHTML = '<div class="loading">加载席位明细…</div>';
       try {
         const det = await apiGet('/fund-flow/dragon-tiger/detail?tsCode=' + encodeURIComponent(tr.getAttribute('data-code')));
-        box.innerHTML = section('席位明细', '<table class="tbl"><thead><tr><th>席位</th><th>类型</th><th>买入</th><th>卖出</th><th>净买</th></tr></thead><tbody>' +
+        box.innerHTML = section('席位明细 · ' + esc(tr.getAttribute('data-code')), '<table class="tbl"><thead><tr><th>席位</th><th>类型</th><th>买入</th><th>卖出</th><th>净买</th></tr></thead><tbody>' +
           (det || []).map(x => `<tr><td>${esc(x.seatName || '—')}</td><td>${esc(x.seatType || '—')}</td><td>${fmtMoney(x.buy)}</td><td>${fmtMoney(x.sell)}</td><td class="${netClass(x.netBuy)}">${fmtMoney(x.netBuy)}</td></tr>`).join('') +
           '</tbody></table>');
       } catch (e) { box.innerHTML = '<div class="error">明细加载失败</div>'; }
     });
   });
+}
+
+/* 主力次日可信度单元：胜(绿)/被埋(红)/净卖或未知(灰) */
+function credCell(flag, d1) {
+  const d1s = d1 != null ? (Number(d1) >= 0 ? '+' : '') + Number(d1).toFixed(2) + '%' : '—';
+  if (flag === 1) return `<span class="cred win">次日胜 ${d1s}</span>`;
+  if (flag === 0) return `<span class="cred trap">被埋 ${d1s}</span>`;
+  if (flag === -1) return `<span class="cred muted">当日净卖</span>`;
+  return `<span class="cred muted">未判定</span>`;
 }
 
 /* ---------- 模块：趋势战法（S6 真实渲染） ---------- */
@@ -486,17 +565,17 @@ async function renderTradelogLog() {
     <div class="tradelog">
       <form id="logForm" class="log-form">
         <div class="form-row">
-          <label>交易日期<input type="date" name="trade_date" /></label>
-          <label>代码<input name="ts_code" placeholder="000001.SZ" /></label>
+          <label>交易日期<input type="date" name="tradeDate" required /></label>
+          <label>代码<input name="tsCode" placeholder="000001.SZ" /></label>
           <label>方向<select name="side"><option value="buy">买入</option><option value="sell">卖出</option></select></label>
         </div>
         <div class="form-row">
           <label>价格<input name="price" type="number" step="0.01" /></label>
           <label>数量<input name="qty" type="number" step="1" /></label>
-          <label>心态标签<input name="emotion_tag" placeholder="贪婪/恐惧/平静" /></label>
-          <label>三态处置<input name="应对" placeholder="买对/买错/未明" /></label>
+          <label>心态标签<input name="emotionTag" placeholder="平静/贪婪/恐惧" /></label>
+          <label>三态处置<input name="reaction" placeholder="买对/买错/未明" /></label>
         </div>
-        <label>买入逻辑/原因<input name="reason" placeholder="大势/热点/个股？" /></label>
+        <label>买入逻辑/原因<input name="reason" placeholder="大势/热点/个股？越具体评分越准" /></label>
         <button class="btn primary" type="submit">提交记录</button>
         <span id="logMsg" class="log-msg"></span>
       </form>
@@ -508,21 +587,23 @@ async function renderTradelogLog() {
     e.preventDefault();
     const fd = new FormData(form);
     const body = {};
-    fd.forEach((v, k) => { if (v !== '') body[k] = v; });
+    fd.forEach((v, k) => {
+      if (v === '') return;
+      if (k === 'price' || k === 'qty') body[k] = Number(v);
+      else body[k] = v;
+    });
     const msg = document.getElementById('logMsg');
     msg.textContent = '提交中…'; msg.className = 'log-msg';
     try {
       const res = await fetch(API_BASE + '/trade-log', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       });
-      if (res.status === 503) {
-        msg.textContent = '⚠️ 交易日志表(trade_log)尚未建表，写入暂不可用（S8 计算层未部署）。接口已正确返回 503。';
-        msg.className = 'log-msg warn';
-      } else if (res.ok) {
-        msg.textContent = '✅ 提交成功'; msg.className = 'log-msg ok';
+      if (res.ok) {
+        msg.textContent = '✅ 提交成功（已按交易心法评分）'; msg.className = 'log-msg ok';
+        form.reset();
         loadLogList();
       } else {
-        msg.textContent = 'HTTP ' + res.status; msg.className = 'log-msg warn';
+        msg.textContent = '写入失败 HTTP ' + res.status; msg.className = 'log-msg warn';
       }
     } catch (err) {
       msg.textContent = '网络错误：' + err.message; msg.className = 'log-msg warn';
@@ -534,16 +615,42 @@ async function loadLogList() {
   if (!box) return;
   try {
     const list = await apiGet('/trade-log');
-    if (!list || !list.length) { box.innerHTML = '<div class="empty">暂无交易记录。</div>'; return; }
-    box.innerHTML = '<table class="tbl"><thead><tr><th>日期</th><th>代码</th><th>方向</th><th>价格</th><th>数量</th><th>逻辑</th><th>心态</th><th>处置</th></tr></thead><tbody>' +
-      list.map(r => `<tr><td>${q(r.trade_date)}</td><td>${esc(r.ts_code || '')}</td><td>${esc(r.side || '')}</td><td>${q(r.price)}</td><td>${q(r.qty)}</td><td>${esc(r.reason || '')}</td><td>${esc(r.emotion_tag || '')}</td><td>${esc(r.应对 || '')}</td></tr>`).join('') + '</tbody></table>';
+    if (!list || !list.length) { box.innerHTML = '<div class="empty">暂无交易记录。写一笔，看心法评分。</div>'; return; }
+    box.innerHTML = '<table class="tbl"><thead><tr><th>日期</th><th>代码</th><th>方向</th><th>价格</th><th>数量</th><th>逻辑</th><th>心态</th><th>处置</th><th>纪律分</th></tr></thead><tbody>' +
+      list.map(r => `<tr><td>${q(r.tradeDate)}</td><td>${esc(r.tsCode || '')}</td><td>${esc(r.side || '')}</td><td>${q(r.price)}</td><td>${q(r.qty)}</td><td>${esc(r.reason || '')}</td><td>${esc(r.emotionTag || '')}</td><td>${esc(r.reaction || '')}</td><td class="${scoreCls(r.disciplineScore)}"><b>${q(r.disciplineScore)}</b></td></tr>`).join('') + '</tbody></table>';
   } catch (e) { box.innerHTML = '<div class="empty">读取失败：' + esc(e.message) + '</div>'; }
 }
 async function renderTradelogScore() {
-  setView(section('纪律 / 心法评分（S8，待实现）', `
-    <div class="placeholder"><div class="ph-icon">🧭</div><h3>计算层尚未实现</h3>
-    <p>纪律评分依赖 <code>trade_log</code> 表（买卖记录 + 心态/应对标签），由 S8 计算层量化"是否破个股思维、应对三态执行度"。</p>
-    <p class="hint">待 S8 落地后，本页展示每笔交易的纪律评分与心法执行度。</p></div>`));
+  let d;
+  try { d = await apiGet('/trade-log/discipline'); }
+  catch (e) { setView(section('纪律 / 心法评分（S8）', `<div class="empty">读取失败：${esc(e.message)}</div>`)); return; }
+  if (!d || !d.count) {
+    setView(section('纪律 / 心法评分（S8）', `
+      <div class="placeholder"><div class="ph-icon">🧭</div><h3>还没有交易记录</h3>
+      <p>去「交易日志」页写几笔买卖（含逻辑 / 心态 / 处置标签），这里会按《顿悟股道》交易心法量化你的纪律分。</p></div>`));
+    return;
+  }
+  const dims = Object.entries(d.dimAvg).map(([k, v]) =>
+    `<div class="dim-row"><span class="dim-name">${esc(k)}</span>${bar(v / 100)}</div>`).join('');
+  const viols = (d.topViolations || []).map(v => `<li class="viol">${esc(v)}</li>`).join('');
+  const samples = (d.samples || []).map(r =>
+    `<tr><td>${q(r.tradeDate)}</td><td>${esc(r.tsCode || '')}</td><td class="${scoreCls(r.disciplineScore)}"><b>${q(r.disciplineScore)}</b></td><td>${esc((r.violations || []).join('；') || '—')}</td></tr>`).join('');
+  setView(section('纪律 / 心法评分（S8）', `
+    <div class="disc">
+      <div class="disc-top">
+        <div class="disc-gauge">${gaugeSVG(d.totalAvg)}<div class="disc-cap">综合纪律分（${d.count} 笔均值）</div></div>
+        <div class="disc-dims"><h4>六维度均分</h4>${dims}</div>
+      </div>
+      <div class="disc-viol">
+        <h4>高频违规（按出现频次）</h4>
+        ${viols ? '<ul class="viol-list">' + viols + '</ul>' : '<p class="hint">暂无违规，纪律优秀 🎉</p>'}
+      </div>
+      <div class="disc-samples">
+        <h4>近 ${(d.samples || []).length} 笔明细</h4>
+        <table class="tbl"><thead><tr><th>日期</th><th>代码</th><th>纪律分</th><th>违规项</th></tr></thead><tbody>${samples}</tbody></table>
+      </div>
+      <div class="hint">六维度：主线思维(破个股思维) / 三因素综合 / 应对三态(分析≠交易) / 心态控制 / 风控纪律(破5日线即走) / 禁杠杆。</div>
+    </div>`));
 }
 
 /* ---------- 路由 ---------- */

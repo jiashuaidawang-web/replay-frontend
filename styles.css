@@ -45,7 +45,10 @@ a{color:inherit;text-decoration:none}
 .badges{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
 .badge{background:#f3f4f6;border-radius:14px;padding:5px 12px;font-size:13px}
 .badge.regime{background:#fdeee9;color:var(--brand)}
+.badge.ok{background:#e7f7ee;color:var(--down);font-weight:600}
+.badge.warn{background:#fdeaea;color:var(--up);font-weight:600}
 .badge.b-up{background:#fdeee9;color:var(--up);font-weight:600}
+.suggestion{margin:10px 0 4px;padding:10px 12px;background:#eef4ff;border-left:3px solid var(--blue);border-radius:6px;font-size:13px;line-height:1.6}
 .pill{display:inline-block;background:#eef6ff;color:#1f6feb;border:1px solid #d6e8ff;border-radius:10px;padding:2px 8px;font-size:12px;margin:2px 4px 2px 0}
 .feats{max-width:360px;line-height:1.8}
 .muted{color:var(--muted)}
@@ -106,3 +109,33 @@ tr.clickable:hover{background:#fdeee9}
 .log-msg{font-size:13px}
 .log-msg.ok{color:var(--down)}.log-msg.warn{color:var(--amber)}
 .log-list{margin-top:6px}
+
+/* 纪律 / 心法评分（S8） */
+.disc{display:flex;flex-direction:column;gap:18px;max-width:880px}
+.disc-top{display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap}
+.disc-gauge{flex-shrink:0;text-align:center}
+.disc-cap{font-size:12px;color:var(--muted);margin-top:4px}
+.disc-dims{flex:1;min-width:280px}
+.disc-dims h4,.disc-viol h4,.disc-samples h4{margin:0 0 10px;font-size:14px}
+.dim-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.dim-name{width:84px;font-size:13px;flex-shrink:0}
+.disc-viol .viol-list{margin:0;padding-left:18px}
+.viol{color:var(--up);font-size:13px;margin:4px 0}
+.disc-samples table{max-width:100%}
+
+/* S3 主力博弈 */
+.sub{margin:18px 0 8px;font-size:14px;font-weight:600;color:var(--ink);border-left:3px solid var(--brand);padding-left:8px}
+.tag.warn{background:#fff4e0;color:var(--amber)}
+.tag.ok{background:#e7f7ee;color:var(--down)}
+.hint.strong{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;padding:8px 10px;border-radius:6px;line-height:1.6}
+td.amt{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--ink)}
+td.note{font-size:12px;color:var(--muted);max-width:300px;line-height:1.5}
+.s3-banner{display:flex;gap:10px;flex-wrap:wrap;margin:4px 0 12px}
+.s3-stat{flex:1;min-width:120px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px 12px;text-align:center}
+.s3-stat b{display:block;font-size:22px;line-height:1.2}
+.s3-stat.up b{color:var(--up)} .s3-stat.down b{color:var(--down)}
+.s3-stat small{color:var(--muted);font-size:12px}
+.cred{display:inline-block;font-size:12px;font-weight:600;padding:2px 6px;border-radius:8px}
+.cred.win{background:#e7f7ee;color:var(--down)}
+.cred.trap{background:#fdeaea;color:var(--up)}
+.cred.muted{background:#eef0f3;color:var(--muted)}
