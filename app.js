@@ -66,6 +66,8 @@ async function apiGet(path) {
     u += (path.includes('?') ? '&' : '?') + 'date=' + encodeURIComponent(state.date);
   }
   const res = await fetch(API_BASE + u);
+  // 后端"无数据日期"统一返回 204 → 返回 null，由各渲染函数展示空态
+  if (res.status === 204) return null;
   if (!res.ok) throw new Error('HTTP ' + res.status);
   return res.json();
 }
@@ -135,6 +137,7 @@ function showError(e) {
 /* ---------- 模块：总览看板 ---------- */
 async function renderOverviewTiming() {
   const ov = await apiGet('/overview');
+  if (!ov) { setView(section('大盘择时 · 四维度评分（S1）', '<div class="empty">该日期无数据</div>')); return; }
   const fd = ov.fourDim || {};
   const dims = [
     { name: '技术', val: fd.tech },
@@ -180,7 +183,8 @@ async function renderOverviewThermal() {
 
 async function renderOverviewMainline() {
   const ov = await apiGet('/overview');
-  const topMl = (ov.topMainline || []).map(m => `
+  if (!ov) { setView(section('主线概览（S4）', '<div class="empty">该日期无数据</div>')); return; }
+  const topMl = ((ov && ov.topMainline) || []).map(m => `
     <div class="bar-row">
       <span class="bar-name">${esc(m.boardName || m.boardCode)}</span>
       <span class="bar-track"><span class="bar-fill" style="width:${Math.min(100, Number(m.strength) || 0)}%"></span></span>
@@ -221,19 +225,28 @@ async function loadBoardDetail(boardCode) {
     ]);
     const lmap = {};
     (ideas || []).forEach(x => { lmap[x.tsCode] = x; });
+    const actionColor = { '买入': '#e74c3c', '低吸': '#e67e22', '持有': '#7f8c8d', '减仓': '#27ae60', '卖出': '#16a085', '观望': '#95a5a6' };
+    const actionBadge = (a) => {
+      const c = actionColor[a] || '#95a5a6';
+      return `<span class="tag" style="background:${c};color:#fff">${esc(a || '—')}</span>`;
+    };
     const rows = (leaders || []).map(l => {
       const idea = lmap[l.tsCode] || {};
+      const bs = Number(idea.buyScore) || 0;
       return `<tr>
         <td><b>${esc(l.stockName || l.tsCode)}</b><br><small>${esc(l.tsCode)}</small></td>
         <td><span class="tag role">${esc(l.role || '—')}</span></td>
         <td>${q(l.boardPos) + (l.boardPos ? ' 板' : '')}</td>
         <td><span class="bar-track sm"><span class="bar-fill" style="width:${Math.min(100, Number(l.score) || 0)}%"></span></span> <span class="bar-val">${q(l.score)}</span></td>
-        <td class="idea">${esc(idea.idea || '—')}<br><small>风险：${esc(idea.riskLevel || '—')} · ${esc(idea.note || '')}</small></td>
+        <td>${actionBadge(idea.action)}</td>
+        <td><span class="bar-track sm"><span class="bar-fill" style="width:${Math.min(100, bs)}%"></span></span> <span class="bar-val">${q(idea.buyScore)}</span></td>
+        <td class="idea">${esc(idea.reason || idea.idea || '—')}<br><small>风险：${esc(idea.riskLevel || '—')} · ${esc(idea.note || '')}</small></td>
       </tr>`;
-    }).join('') || '<tr><td colspan="5" class="empty">该板块无龙头候选</td></tr>';
-    box.innerHTML = section('龙头池 & 板位演化 · ' + esc(boardCode), `
+    }).join('') || '<tr><td colspan="7" class="empty">该板块无龙头候选</td></tr>';
+    const banner = `<div class="hint strong">S5 龙头买卖·独立计算层：基于<b>分歧日/一致日</b>(情绪温度) + <b>板块高潮</b>(主线强度) + <b>真龙见顶</b>(高位+分歧) 三维量化，输出买卖信号(买/低吸/持有/减仓/卖出/观望) + 评分 + 风险等级。</div>`;
+    box.innerHTML = section('龙头池 & 板位演化 · ' + esc(boardCode), banner + `
       <table class="tbl">
-        <thead><tr><th>个股</th><th>角色</th><th>板位</th><th>龙头相评分</th><th>买卖建议(S5)</th></tr></thead>
+        <thead><tr><th>个股</th><th>角色</th><th>板位</th><th>龙头相评分</th><th>操作</th><th>买卖评分</th><th>买卖理由(S5)</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>`);
   } catch (e) {
@@ -684,8 +697,21 @@ async function pingApi() {
 }
 
 /* ---------- 启动 ---------- */
-document.getElementById('datePicker').addEventListener('change', e => { state.date = e.target.value; route(); });
+const datePicker = document.getElementById('datePicker');
+datePicker.addEventListener('change', e => { state.date = e.target.value; route(); });
 document.getElementById('refreshBtn').addEventListener('click', () => route());
 window.addEventListener('hashchange', route);
+
+/** 初始化 datePicker 范围：min=数据起点，max=最新交易日（来自 overview.tradeDate）。 */
+(async function initDateRange() {
+  datePicker.min = '2024-01-01';
+  try {
+    const r = await fetch(API_BASE + '/overview');
+    if (r.status === 200) {
+      const ov = await r.json();
+      if (ov && ov.tradeDate) datePicker.max = ov.tradeDate;
+    }
+  } catch { /* 后端不可达时跳过，不阻塞启动 */ }
+})();
 pingApi();
 route();
